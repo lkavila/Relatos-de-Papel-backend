@@ -4,7 +4,7 @@
 
 Para probar los servicios back-end de forma directa puedes importar la colección de Postman incluida en este repositorio:
 
-📁 [`00_Otros_Recursos/UNIR Supplies Back-End.postman_collection.json`](../../00_Otros_Recursos/UNIR%20Supplies%20Back-End.postman_collection.json)
+📁 [`Relatos de papel postman_collection.json`](./Relatos%20de%20papel.postman_collection.json))
 
 Las carpetas de la colección relevantes para este tema son:
 
