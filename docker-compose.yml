@@ -41,6 +41,36 @@ services:
       timeout: 5s
       retries: 10
 
+  mysql_users:
+    image: mysql:8.0
+    container_name: mysql_users_3310
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass_users
+      MYSQL_DATABASE: users
+      MYSQL_USER: users_user
+      MYSQL_PASSWORD: users_pass
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql_users_data:/var/lib/mysql
+    networks:
+      - relatos-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass_users"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:6.2
+    container_name: redis_6379
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - relatos-net
+
   eureka-server:
     build:
       context: ./eureka-server
@@ -67,6 +97,7 @@ services:
     environment:
       PORT: 8081
       EUREKA_URL: http://eureka-server:8761/eureka
+      ORDERS_URL: http://orders/api/v1
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql_catalog:3306/catalog?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: catalog_user
       SPRING_DATASOURCE_PASSWORD: catalog_pass
@@ -88,9 +119,33 @@ services:
     environment:
       PORT: 8082
       EUREKA_URL: http://eureka-server:8761/eureka
+      CATALOG_URL: http://catalog/api/v1
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql_orders:3306/orders?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: orders_user
       SPRING_DATASOURCE_PASSWORD: orders_pass
+    ports:
+      - "8082:8082"
+    networks:
+      - relatos-net
+
+  users:
+    build:
+      context: ./users
+    container_name: users
+    restart: unless-stopped
+    depends_on:
+      mysql_users:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+      redis:
+        condition: service_started
+    environment:
+      PORT: 8082
+      EUREKA_URL: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_users:3306/users?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: users_user
+      SPRING_DATASOURCE_PASSWORD: users_pass
     ports:
       - "8082:8082"
     networks:
@@ -111,6 +166,7 @@ services:
     environment:
       PORT: 8762
       EUREKA_URL: http://eureka-server:8761/eureka
+      USERS_URL: http://users/api/v1
       ALLOWED_ORIGINS: "*"
       ROUTE_TABLES_ENABLED: "READ_ONLY"
     ports:
@@ -121,7 +177,7 @@ services:
 volumes:
   mysql_catalog_data:
   mysql_orders_data:
-
+  mysql_users_data:
 networks:
   relatos-net:
     driver: bridge
