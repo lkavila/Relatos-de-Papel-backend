@@ -37,12 +37,15 @@ npm run dev
 | Catálogo | [back-end-supplies-catalogue](https://github.com/lkavila/RelatosDePapel-Catalog-Microservice) |
 | Pedidos  | [back-end-supplies-orders](https://github.com/lkavila/RelatosDePapel-Orders-Microservice) |
 | Eureka Server | [back-end-eureka](https://github.com/lkavila/RelatosDePapel-Eureka-Server) |
-| Cloud Gateway ACL | [back-end-cloud-gateway-filters](https://github.com/lkavila/RelatosDePapel-Gateway) |
+| Cloud Gateway ACL and security | [back-end-cloud-gateway-filters](https://github.com/lkavila/RelatosDePapel-Gateway) |
+| Usuarios JWT | [back-end-users](https://github.com/lkavila/RelatosDePapel-Users-Microservice) |
+| Comunicaciones | [back-end-communications](https://github.com/JennyKarolina/RelatosDePapel-Communications.git) |
 
 **Orden de arranque recomendado:**
 1. **Eureka Server**
 2. **Cloud Gateway Filters (ACL)**
-3. **Catalogue** y **Orders**
-4. **Front-end**
+3. **Bases de datos, redis y rabbitMQ (recomiendo usar el docker-compuse de este repositorio)**
+4. **Catalogue**, **Orders**, **Users** y  **Communications**
+5. **Front-end**
 
 > Este gateway incorpora **filtros** que restringen la comunicación desde el front-end: únicamente se permiten peticiones **POST**. De esta forma, toda la información viaja dentro del **body** de la petición, lo que facilita su cifrado mediante un posible certificado SSL. Cualquier otro verbo HTTP (GET, PUT, DELETE…) será rechazado por el gateway, asegurando que la capa de presentación no pueda interactuar directamente con los endpoints REST estándar de los microservicios.
