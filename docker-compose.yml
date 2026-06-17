@@ -71,6 +71,20 @@ services:
     networks:
       - relatos-net
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_5672
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: Admin123*
+      RABBITMQ_DEFAULT_VHOST: /
+    networks:
+      - relatos-net
+
   eureka-server:
     build:
       context: ./eureka-server
