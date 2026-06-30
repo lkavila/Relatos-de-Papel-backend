@@ -1,0 +1,277 @@
+services:
+
+  # ══════════════════════════════════════════════════════════════════
+  # BASES DE DATOS DE TEST
+  # Puertos distintos a producción para evitar colisiones:
+  #   prod: catalog=3308, orders=3309, users=3310
+  #   test: catalog=4308, orders=4309, users=4310
+  # ══════════════════════════════════════════════════════════════════
+
+  mysql_catalog_test:
+    image: mysql:8.0
+    container_name: mysql_catalog_test
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass_catalog
+      MYSQL_DATABASE: catalog
+      MYSQL_USER: catalog_user
+      MYSQL_PASSWORD: catalog_pass
+    ports:
+      - "4308:3306"
+    volumes:
+      - ./catalog/src/main/resources/db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - relatos-test-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass_catalog"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql_orders_test:
+    image: mysql:8.0
+    container_name: mysql_orders_test
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass_orders
+      MYSQL_DATABASE: orders
+      MYSQL_USER: orders_user
+      MYSQL_PASSWORD: orders_pass
+    ports:
+      - "4309:3306"
+    volumes:
+      - ./orders/src/main/resources/db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - relatos-test-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass_orders"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql_users_test:
+    image: mysql:8.0
+    container_name: mysql_users_test
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass_users
+      MYSQL_DATABASE: users
+      MYSQL_USER: users_user
+      MYSQL_PASSWORD: users_pass
+    ports:
+      - "4310:3306"
+    volumes:
+      - ./users/src/main/resources/db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - relatos-test-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass_users"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ══════════════════════════════════════════════════════════════════
+  # INFRAESTRUCTURA COMPARTIDA DE TEST
+  # Redis y RabbitMQ en puertos distintos a prod (6379 y 5672)
+  # ══════════════════════════════════════════════════════════════════
+
+  redis_test:
+    image: redis:6.2
+    container_name: redis_test
+    ports:
+      - "6380:6379"
+    command: redis-server --save "" --appendonly no
+    networks:
+      - relatos-test-net
+
+  rabbitmq_test:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_test
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: Admin123*
+      RABBITMQ_DEFAULT_VHOST: /
+    networks:
+      - relatos-test-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ══════════════════════════════════════════════════════════════════
+  # MICROSERVICIOS DE TEST
+  # Mismas imágenes que producción, perfil Spring = test
+  # ══════════════════════════════════════════════════════════════════
+
+  eureka-server-test:
+    build:
+      context: ./eureka-server
+    container_name: eureka-server-test
+    hostname: eureka-server
+    ports:
+      - "8762:8761"
+    environment:
+      PORT: 8761
+      HOSTNAME: eureka-server
+      SPRING_PROFILES_ACTIVE: test
+    networks:
+      - relatos-test-net
+
+  catalog-test:
+    build:
+      context: ./catalog
+    container_name: catalog-test
+    hostname: catalog
+    depends_on:
+      mysql_catalog_test:
+        condition: service_healthy
+      eureka-server-test:
+        condition: service_started
+    environment:
+      PORT: 8081
+      SPRING_PROFILES_ACTIVE: test
+      RAILWAY_PRIVATE_DOMAIN: "catalog"
+      EUREKA_URL: http://eureka-server:8761/eureka
+      ORDERS_URL: lb://orders/api/v1
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_catalog_test:3306/catalog?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: catalog_user
+      SPRING_DATASOURCE_PASSWORD: catalog_pass
+    ports:
+      - "9081:8081"
+    networks:
+      - relatos-test-net
+
+  orders-test:
+    build:
+      context: ./orders
+    container_name: orders-test
+    hostname: orders
+    depends_on:
+      mysql_orders_test:
+        condition: service_healthy
+      eureka-server-test:
+        condition: service_started
+      rabbitmq_test:
+        condition: service_healthy
+    environment:
+      PORT: 8082
+      SPRING_PROFILES_ACTIVE: test
+      RAILWAY_PRIVATE_DOMAIN: "orders"
+      EUREKA_URL: http://eureka-server:8761/eureka
+      CATALOG_URL: lb://catalog/api/v1
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_orders_test:3306/orders?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: orders_user
+      SPRING_DATASOURCE_PASSWORD: orders_pass
+      SPRING_RABBITMQ_HOST: rabbitmq_test
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: admin
+      SPRING_RABBITMQ_PASSWORD: Admin123*
+    ports:
+      - "9082:8082"
+    networks:
+      - relatos-test-net
+
+  users-test:
+    build:
+      context: ./users
+    hostname: users
+    depends_on:
+      mysql_users_test:
+        condition: service_healthy
+      eureka-server-test:
+        condition: service_started
+      redis_test:
+        condition: service_started
+    container_name: users-test
+    environment:
+      PORT: 8083
+      SPRING_PROFILES_ACTIVE: test
+      RAILWAY_PRIVATE_DOMAIN: users
+      EUREKA_URL: http://eureka-server:8761/eureka
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql_users_test:3306/users?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: users_user
+      SPRING_DATASOURCE_PASSWORD: users_pass
+      REDIS_HOST: redis_test
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+    ports:
+      - "9083:8083"
+    networks:
+      - relatos-test-net
+
+  communications-test:
+    build:
+      context: ./RelatosDePapel-Communications
+    container_name: communications-test
+    hostname: orders-communications
+    depends_on:
+      eureka-server-test:
+        condition: service_started
+      rabbitmq_test:
+        condition: service_healthy
+    environment:
+      PORT: 8084
+      SPRING_PROFILES_ACTIVE: test
+      RAILWAY_PRIVATE_DOMAIN: communications
+      EUREKA_URL: http://eureka-server:8761/eureka
+      RABBITMQ_HOST: rabbitmq_test
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: admin
+      RABBITMQ_PASSWORD: Admin123*
+      # En test el mail va a logs, no se envía nada real
+      SENDER_MAIL_USERNAME: localhost
+      SPRING_MAIL_PORT: 1025
+    ports:
+      - "9084:8084"
+    networks:
+      - relatos-test-net
+
+  gateway-test:
+    build:
+      context: ./gateway
+    hostname: gateway
+    container_name: gateway-test
+    depends_on:
+      eureka-server-test:
+        condition: service_started
+      catalog-test:
+        condition: service_started
+      orders-test:
+        condition: service_started
+      users-test:
+        condition: service_started
+    environment:
+      PORT: 8762
+      SPRING_PROFILES_ACTIVE: test
+      RAILWAY_PRIVATE_DOMAIN: "gateway"
+      EUREKA_URL: http://eureka-server:8761/eureka
+      USERS_URL: lb://users/api/v1
+      ALLOWED_ORIGINS: "http://localhost:5173"
+      ROUTE_TABLES_ENABLED: "READ_ONLY"
+    ports:
+      - "9762:8762"
+    networks:
+      - relatos-test-net
+
+  # ── React frontend (build de test) ---------------------------
+  react-app-test:
+    build:
+      context: ../relatos-de-papel-UNIR-fullstack  # ruta a tu app React
+      dockerfile: Dockerfile.dev
+      args:
+        VITE_API_URL: http://localhost:9762/
+        VITE_APP_ENV: test
+    container_name: rdp-frontend-test
+    ports:
+      - "5173:5173"
+    depends_on:
+      gateway-test:
+        condition: service_started
+    networks:
+      - relatos-test-net
+
+networks:
+  relatos-test-net:
+    driver: bridge
